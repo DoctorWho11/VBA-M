@@ -10,12 +10,12 @@ SET( CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeScripts )
 
 option( ENABLE_SDL "Build the SDL port" ON )
 option( ENABLE_GTK "Build the GTK+ GUI" ON )
-option( ENABLE_WX "Build the wxWidgets port" OFF )
+option( ENABLE_WX "Build the wxWidgets port" ON )
 option( ENABLE_DEBUGGER "Enable the debugger" ON )
 option( ENABLE_NLS "Enable translations" ON )
 option( ENABLE_ASM_CORE "Enable x86 ASM CPU cores" OFF )
 option( ENABLE_ASM_SCALERS "Enable x86 ASM graphic filters" OFF )
-option( ENABLE_LINK "Enable GBA linking functionality" OFF )
+option( ENABLE_LINK "Enable GBA linking functionality" ON )
 option( ENABLE_LIRC "Enable LIRC support" OFF )
 option( ENABLE_FFMPEG "Enable ffmpeg A/V recording" OFF )
 if(ENABLE_ASM_SCALERS)
@@ -36,15 +36,25 @@ endif( NOT ENABLE_DEBUGGER AND ENABLE_SDL )
 
 # Set the version number with -DVERSION=X.X.X-uber
 IF( NOT VERSION )
-    SET( VERSION "1.8.0-SVN" )
-   
-    IF(EXISTS "${CMAKE_SOURCE_DIR}/.svn")
-        FIND_PACKAGE(Subversion)
-        IF(SUBVERSION_FOUND)
-            Subversion_WC_INFO(${CMAKE_SOURCE_DIR} SVN_INFO)
-            SET( VERSION "1.8.0-SVN${SVN_INFO_WC_REVISION}" )
-        ENDIF(SUBVERSION_FOUND)
-    ENDIF(EXISTS "${CMAKE_SOURCE_DIR}/.svn")
+    SET( VERSION "https://github.com/EmperorArthur/VBA-M" )
+
+    #openmw does this
+    if(EXISTS ${PROJECT_SOURCE_DIR}/.git)
+        if(NOT EXISTS ${PROJECT_SOURCE_DIR}/.git/shallow)
+            find_package(Git)
+            if(GIT_FOUND)
+                include(GetGitRevisionDescription)
+                get_git_head_revision(REFSPEC COMMITHASH)
+                 SET( VERSION "GIT Commit: " ${COMMITHASH} )
+
+            else(GIT_FOUND)
+                message(WARNING "Git executable not found")
+            endif(GIT_FOUND)
+        else(NOT EXISTS ${PROJECT_SOURCE_DIR}/.git/shallow)
+            message(STATUS "Shallow Git clone detected, not attempting to retrieve version info")
+        endif(NOT EXISTS ${PROJECT_SOURCE_DIR}/.git/shallow)
+    endif(EXISTS ${PROJECT_SOURCE_DIR}/.git)
+
 ENDIF( NOT VERSION )
 
 # Fill in SDLMAIN_LIBRARY on OS X manually to avoid using SDLMain.m
@@ -324,31 +334,6 @@ else( ENABLE_ASM_SCALERS )
     ADD_DEFINITIONS ( -DNO_ASM )
 endif( ENABLE_ASM_SCALERS )
 
-SET(SRC_GTK
-    src/gtk/configfile.cpp
-    src/gtk/main.cpp
-    src/gtk/system.cpp
-    src/gtk/windowcallbacks.cpp
-    src/gtk/filters.cpp
-    src/gtk/generalconfig.cpp
-    src/gtk/gameboyconfig.cpp
-    src/gtk/gameboyadvanceconfig.cpp
-    src/gtk/cheatlist.cpp
-    src/gtk/cheatedit.cpp
-    src/gtk/gameboyadvancecheatlist.cpp
-    src/gtk/gameboycheatlist.cpp
-    src/gtk/joypadconfig.cpp
-    src/gtk/directoriesconfig.cpp
-    src/gtk/displayconfig.cpp
-    src/gtk/soundconfig.cpp
-    src/gtk/screenarea.cpp
-    src/gtk/screenarea-cairo.cpp
-    src/gtk/screenarea-opengl.cpp
-    src/gtk/tools.cpp
-    src/gtk/window.cpp
-    src/sdl/inputSDL.cpp
-)
-
 if( ENABLE_DEBUGGER )
     SET(SRC_DEBUGGER
         src/gba/armdis.cpp
@@ -363,23 +348,6 @@ INCLUDE_DIRECTORIES(
     ${PNG_INCLUDE_DIR}
     ${SDL2_INCLUDE_DIR}
 )
-
-IF( ENABLE_GTK )
-    INCLUDE_DIRECTORIES(
-        ${GLIBMM_INCLUDE_DIRS}
-        ${GIOMM_INCLUDE_DIRS}
-        ${GTKMM_INCLUDE_DIRS}
-        ${GDKMM_INCLUDE_DIRS}
-        ${GTKGLMM_INCLUDE_DIRS}
-    )
-
-    LINK_DIRECTORIES(
-        ${GLIBMM_LIBRARY_DIRS}
-        ${GIOMM_LIBRARY_DIRS}
-        ${GTKMM_LIBRARY_DIRS}
-        ${GTKGLMM_LIBRARY_DIRS}
-    )
-ENDIF( ENABLE_GTK )
 
 IF( ENABLE_FFMPEG )
     INCLUDE_DIRECTORIES(
@@ -429,29 +397,10 @@ IF( ENABLE_SDL )
     INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/sdl/vbam.cfg-example
             DESTINATION ${SYSCONFDIR}
             RENAME vbam.cfg)
-    INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/vba-over.ini DESTINATION ${DATA_INSTALL_DIR})
 ENDIF( ENABLE_SDL )
 
 IF( ENABLE_GTK )
-    ADD_EXECUTABLE (
-        gvbam
-        WIN32
-        MACOSX_BUNDLE
-        ${SRC_GTK}
-    )
-
-    TARGET_LINK_LIBRARIES (
-        gvbam
-        ${VBAMCORE_LIBS}
-        ${GTKMM_LIBRARIES}
-        ${GTKGLMM_LIBRARIES}
-    )
-
-    INSTALL(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/gvbam DESTINATION bin)
-    INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/gtk/gvbam.desktop DESTINATION share/applications)
-    INSTALL(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/gtk/icons/ DESTINATION share/icons/hicolor PATTERN ".svn" EXCLUDE)
-    INSTALL(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/gtk/ui DESTINATION ${DATA_INSTALL_DIR} PATTERN ".svn" EXCLUDE)
-    INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/vba-over.ini DESTINATION ${DATA_INSTALL_DIR})
+    add_subdirectory (src/gtk)
 
 ENDIF( ENABLE_GTK )
 
@@ -470,3 +419,5 @@ if( ENABLE_GTK OR ENABLE_WX )
         add_subdirectory(po)
     endif( ENABLE_NLS )
 endif( ENABLE_GTK OR ENABLE_WX )
+
+INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/vba-over.ini DESTINATION ${DATA_INSTALL_DIR})
