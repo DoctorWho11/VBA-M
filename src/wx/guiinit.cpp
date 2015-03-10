@@ -2808,9 +2808,10 @@ bool MainFrame::InitMore(void)
 	if(mthr < 0)
 	    mthr = 2;
     cb=SafeXRCCTRL<wxCheckBox>(d, "Multithread");
-    cb->SetValidator(wxBoolIntValidator(&gopts.max_threads, mthr));
-	if(mthr <= 1)
-	    cb->Hide();
+//     cb->SetValidator(wxBoolIntValidator(&gopts.max_threads, mthr));
+    gopts.max_threads = 1;
+// 	if(mthr <= 1)
+// 	    cb->Hide();
 #ifdef MMX
 	getcbb("MMX", cpu_mmx);
 #else

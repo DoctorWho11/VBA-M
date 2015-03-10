@@ -1086,9 +1086,10 @@ public:
 	// + 1 for stupid top border
 	dst += outstride * (band_lower + 1) * scale;
 
-	while(nthreads == 1 || sig.Wait() == wxCOND_NO_ERROR) {
-	    if(!src /* && nthreads > 1 */ ) {
+	while(sig.Wait() == wxCOND_NO_ERROR) {
+	    if(!src) {
             lock.Unlock();
+            std::runtime_error("ERROR:  No Data for filter to process!");
             return 0;
 	    }
 	    // + 1 for stupid top border
@@ -1117,11 +1118,10 @@ public:
 	    if(mainFilter == NULL)
         {
             std::runtime_error("ERROR:  Filter not initialized!");
+            done->Post();
             return (wxThread::ExitCode) -1;
         }
 	    if(!mainFilter->exists()) {
-            if(nthreads == 1)
-                return 0;
             done->Post();
             continue;
 	    }
@@ -1132,8 +1132,6 @@ public:
 	    // the IFB filters will screw up royally as well
         mainFilter->run(src, instride, delta, dst, outstride, width, band_height);
 
-        if(nthreads == 1)
-            return 0;
         done->Post();
         continue;
 	}
@@ -1174,66 +1172,74 @@ void DrawingPanel::DrawArea(u8 **data)
     }
 
     // First, apply filters, if applicable, in parallel, if enabled
-    if(myFilter->exists() ||
-       gopts.ifb != IFB_NONE /* FIXME: && (gopts.ifb != FF_MOTION_BLUR || !renderer_can_motion_blur) */ ) {
-	if(nthreads != gopts.max_threads) {
-	    if(nthreads) {
-		if(nthreads > 1)
-		    for(int i = 0; i < nthreads; i++) {
-			threads[i].lock.Lock();
-			threads[i].src = NULL;
-			threads[i].sig.Signal();
-			threads[i].lock.Unlock();
-			threads[i].Wait();
-		    }
-		delete[] threads;
-	    }
-	    nthreads = gopts.max_threads;
-	    threads = new FilterThread[nthreads];
-	    // first time around, no threading in order to avoid
-	    // static initializer conflicts
-	    threads[0].threadno = 0;
-	    threads[0].nthreads = 1;
-	    threads[0].width = width;
-	    threads[0].height = height;
-	    threads[0].scale = scale;
-	    threads[0].src = *data;
-	    threads[0].dst = todraw;
-	    threads[0].delta = delta;
-	    threads[0].rpi = rpi;
-        threads[0].mainFilter=myFilter;
-	    threads[0].Entry();
-	    // go ahead and start the threads up, though
-	    if(nthreads > 1) {
-		for(int i = 0; i < nthreads; i++) {
-		    threads[i].threadno = i;
-		    threads[i].nthreads = nthreads;
-		    threads[i].width = width;
-		    threads[i].height = height;
-		    threads[i].scale = scale;
-		    threads[i].dst = todraw;
-		    threads[i].delta = delta;
-		    threads[i].rpi = rpi;
-            threads[i].mainFilter=myFilter;
-		    threads[i].done = &filt_done;
-		    threads[i].lock.Lock();
-		    threads[i].Create();
-		    threads[i].Run();
-		}
-	    }
-	} else if(nthreads == 1)
-	    threads[0].Entry();
-	else {
-	    for(int i = 0; i < nthreads; i++) {
-		threads[i].lock.Lock();
-		threads[i].src = *data;
-		threads[i].sig.Signal();
-		threads[i].lock.Unlock();
-	    }
-	    for(int i = 0; i < nthreads; i++)
-		filt_done.Wait();
-	}
+    if(myFilter->exists() || gopts.ifb != IFB_NONE ) {
+        //If the number of threads has changed
+        if(nthreads != gopts.max_threads) {
+            //If old threads exist, get rid of them
+            if(threads)
+            {
+                for(int i = 0; i < nthreads; i++)
+                {
+                    threads[i].lock.Lock();
+                    threads[i].src = NULL;
+                    threads[i].sig.Signal();
+                    threads[i].lock.Unlock();
+                    threads[i].Wait();
+                }
+                delete[] threads;
+                threads = NULL;
+            }
+            nthreads = gopts.max_threads;
+            threads = new FilterThread[nthreads];
+            // first time around, no threading in order to avoid
+            // static initializer conflicts
+//             std::cerr << "Initalizing Thread 0" << std::endl;
+//             threads[0].threadno = 0;
+//             threads[0].nthreads = 1;
+//             threads[0].width = width;
+//             threads[0].height = height;
+//             threads[0].scale = scale;
+//             threads[0].dst = todraw;
+//             threads[0].delta = delta;
+//             threads[0].rpi = rpi;
+//             threads[0].mainFilter=myFilter;
+//             threads[0].done = &filt_done;
+//             //Run Thread 0 once to initialize the filters
+//             threads[0].src = *data;
+//             threads[0].Create();
+//             threads[0].Run();
+//             threads[0].sig.Signal();
+//             filt_done.Wait();
+            std::cerr << "Initalizing Threads" << std::endl;
+            // go ahead and start the threads up after that first entry
+            for(int i = 0; i < nthreads; i++) {
+                threads[i].threadno = i;
+                threads[i].nthreads = nthreads;
+                threads[i].width = width;
+                threads[i].height = height;
+                threads[i].scale = scale;
+                threads[i].dst = todraw;
+                threads[i].delta = delta;
+                threads[i].rpi = rpi;
+                threads[i].mainFilter=myFilter;
+                threads[i].done = &filt_done;
+                threads[i].Create();
+                threads[i].Run();
+            }
+        }
+        //With threads now created, lets run them
+        std::cerr << "Running Threads" << std::endl;
+        for(int i = 0; i < nthreads; i++) {
+            threads[i].lock.Lock();
+            threads[i].src = *data;
+            threads[i].sig.Signal();
+            threads[i].lock.Unlock();
+        }
+        //And wait for them all to finish
+        for(int i = 0; i < nthreads; i++)
+            filt_done.Wait();
 
+        std::cerr << "Threads Complete" << std::endl;
     }
 
     // swap buffers now that src has been processed

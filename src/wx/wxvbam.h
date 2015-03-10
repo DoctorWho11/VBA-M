@@ -479,8 +479,8 @@ protected:
     int width, height, scale;
     u8 *todraw;
     u8 *pixbuf1, *pixbuf2;
-    FilterThread *threads;
-    int nthreads;
+    FilterThread *threads = NULL;
+    int nthreads = 0;
     wxSemaphore filt_done;
     const RENDER_PLUGIN_INFO *rpi; // also flag indicating plugin loaded
     // largest buffer required is 32-bit * (max width + 1) * (max height + 2)
